@@ -276,7 +276,7 @@ func TestGatewayServer_ExtProcProcess(t *testing.T) {
 		t.Fatalf("unexpected ImmediateResponse: %+v", r2.GetImmediateResponse())
 	}
 
-	//Also verify ResponseHeaders, ResponseBody, RequestTrailers, ResponseTrailers phases
+	// Also verify ResponseHeaders, ResponseBody, RequestTrailers, ResponseTrailers phases
 	_ = stream.Send(&extprocv3.ProcessingRequest{
 		Request: &extprocv3.ProcessingRequest_ResponseHeaders{
 			ResponseHeaders: &extprocv3.HttpHeaders{},
@@ -558,8 +558,20 @@ func TestCalloutClient_UnixSocketAndMTLS(t *testing.T) {
 			t.Fatalf("listen tcp: %v", err)
 		}
 		callout := &referenceCalloutServer{}
+
+		// The test name promises mTLS, so the server must actually require
+		// and verify a client certificate against the same CA the client
+		// is configured with - otherwise this only exercises one-way TLS
+		// and a regression that drops client-cert enforcement would pass
+		// silently.
+		caPool := x509.NewCertPool()
+		if !caPool.AppendCertsFromPEM(caPEM) {
+			t.Fatalf("failed to parse CA cert for client-auth pool")
+		}
 		srv := grpc.NewServer(grpc.Creds(credentials.NewTLS(&tls.Config{
 			Certificates: []tls.Certificate{serverCert},
+			ClientAuth:   tls.RequireAndVerifyClientCert,
+			ClientCAs:    caPool,
 			MinVersion:   tls.VersionTLS12,
 			NextProtos:   []string{"h2"},
 		})))
